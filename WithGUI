@@ -1,0 +1,238 @@
+# Change console colors and size
+[System.Console]::BackgroundColor = 'White'
+[System.Console]::ForegroundColor = 'Black'
+[System.Console]::Clear()
+[System.Console]::BufferWidth = [System.Math]::Max([System.Console]::WindowWidth, 80)
+[System.Console]::BufferHeight = 50
+[System.Console]::WindowWidth = 80
+[System.Console]::WindowHeight = 50
+
+# Run script indefinitely
+while ($true) {
+    # Create form for email, password, and save location input
+    Add-Type -AssemblyName System.Windows.Forms
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = 'Input Credentials'
+    $form.Size = New-Object System.Drawing.Size(300,300)
+    $form.StartPosition = 'CenterScreen'
+
+    $emailLabel = New-Object System.Windows.Forms.Label
+    $emailLabel.Location = New-Object System.Drawing.Point(10,20)
+    $emailLabel.Size = New-Object System.Drawing.Size(280,20)
+    $emailLabel.Text = 'Please enter your email:'
+    $form.Controls.Add($emailLabel)
+
+    $emailBox = New-Object System.Windows.Forms.TextBox
+    $emailBox.Location = New-Object System.Drawing.Point(10,40)
+    $emailBox.Size = New-Object System.Drawing.Size(260,20)
+    $form.Controls.Add($emailBox)
+    $passwordLabel = New-Object System.Windows.Forms.Label
+    $passwordLabel.Location = New-Object System.Drawing.Point(10,70)
+    $passwordLabel.Size = New-Object System.Drawing.Size(280,20)
+    $passwordLabel.Text = 'Please enter your password:'
+    $form.Controls.Add($passwordLabel)
+
+    $passwordBox = New-Object System.Windows.Forms.TextBox
+    $passwordBox.Location = New-Object System.Drawing.Point(10,90)
+    $passwordBox.Size = New-Object System.Drawing.Size(260,20)
+    $passwordBox.UseSystemPasswordChar = $true
+    $form.Controls.Add($passwordBox)
+
+    $saveLabel = New-Object System.Windows.Forms.Label
+    $saveLabel.Location = New-Object System.Drawing.Point(10,120)
+    $saveLabel.Size = New-Object System.Drawing.Size(280,20)
+    $saveLabel.Text = 'Please enter your save location:'
+    $form.Controls.Add($saveLabel)
+
+    $saveButton = New-Object System.Windows.Forms.Button
+    $saveButton.Location = New-Object System.Drawing.Point(10,140)
+    $saveButton.Size = New-Object System.Drawing.Size(75,23)
+    $saveButton.Text = 'Browse'
+    $form.Controls.Add($saveButton)
+    $saveBox = New-Object System.Windows.Forms.TextBox
+    $saveBox.Location = New-Object System.Drawing.Point(90,140)
+    $saveBox.Size = New-Object System.Drawing.Size(180,20)
+    $form.Controls.Add($saveBox)
+
+    $saveButton.Add_Click({
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    if ($folderBrowser.ShowDialog() -eq 'OK') {
+        $saveBox.Text = $folderBrowser.SelectedPath
+    }
+})
+
+    $OKButton = New-Object System.Windows.Forms.Button
+    $OKButton.Location = New-Object System.Drawing.Point(10,170)
+    $OKButton.Size = New-Object System.Drawing.Size(75,23)
+    $OKButton.Text = 'OK'
+    $OKButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.AcceptButton = $OKButton
+    $form.Controls.Add($OKButton)
+
+    $form.Topmost = $true
+
+    $form.Add_Shown({ $emailBox.Select() })
+    $result = $form.ShowDialog()
+
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK)
+    {
+        $email = $emailBox.Text
+        $password = $passwordBox.Text
+        $saveDirectory = $saveBox.Text
+
+        # Blink's API Server
+        $blinkAPIServer = 'rest-prod.immedia-semi.com'
+
+        # Headers for authentication
+        $headers = @{
+            "Host" = "$blinkAPIServer"
+            "Content-Type" = "application/json"
+        }
+                # Credential data
+        $body = @{
+            "email" = "$email"
+            "password" = "$password"
+            "unique_id" = "00000000-1111-0000-1111-00000000000"
+        } | ConvertTo-Json
+
+        # Login URL of Blink API
+        $uri = "https://$blinkAPIServer/api/v5/account/login"
+
+        # Authenticate credentials with Blink Server and get our token for future requests
+        $response = Invoke-RestMethod -UseBasicParsing $uri -Method Post -Headers $headers -Body $body
+
+        if(-not $response){
+            Write-Host "Invalid credentials provided. Please verify email and password."
+            exit
+        }
+
+        # Get the object data
+        $region = $response.account.tier
+        $authToken = $response.auth.token
+        $accountID = $response.account.account_id
+        $clientID = $response.account.client_id
+
+        # Create form for PIN input
+        $form = New-Object System.Windows.Forms.Form
+        $form.Text = 'Input PIN'
+        $form.Size = New-Object System.Drawing.Size(300,200)
+        $form.StartPosition = 'CenterScreen'
+
+        $label = New-Object System.Windows.Forms.Label
+        $label.Location = New-Object System.Drawing.Point(10,20)
+        $label.Size = New-Object System.Drawing.Size(280,20)
+        $label.Text = 'Please enter your PIN:'
+        $form.Controls.Add($label)
+
+        $textBox = New-Object System.Windows.Forms.TextBox
+        $textBox.Location = New-Object System.Drawing.Point(10,40)
+        $textBox.Size = New-Object System.Drawing.Size(260,20)
+        $form.Controls.Add($textBox)
+
+        $OKButton = New-Object System.Windows.Forms.Button
+        $OKButton.Location = New-Object System.Drawing.Point(10,70)
+        $OKButton.Size = New-Object System.Drawing.Size(75,23)
+        $OKButton.Text = 'OK'
+        $OKButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+        $form.AcceptButton = $OKButton
+        $form.Controls.Add($OKButton)
+
+        $form.Topmost = $true
+
+        $form.Add_Shown({ $textBox.Select() })
+        $result = $form.ShowDialog()
+
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK)
+        {
+            $pin = $textBox.Text
+
+        $uri = 'https://rest-'+ $region +".immedia-semi.com/api/v4/account/"+ $accountID +'/client/'+ $clientID +"/pin/verify"
+
+        # Headers for PIN authentication
+        $pin_headers = @{
+           "CONTENT-TYPE" = "application/json"
+           "TOKEN-AUTH" = $authToken
+        }
+
+        # PIN goes in the body
+        $pin_body = @{
+            "pin" = $pin
+        } | ConvertTo-Json
+
+        # Verify PIN
+        $pin_response = Invoke-RestMethod -UseBasicParsing $uri -Method Post -Headers $pin_headers -Body $pin_body
+
+        if(-not $pin_response){
+            Write-Host "Invalid Pin response. Please re-run the script again and use the same pin within the first minute."
+            exit
+        }
+
+        # Headers for subsequent requests
+        $headers = @{
+            "TOKEN_AUTH" = "$authToken"
+        }
+
+        # Get list of networks
+        $uri = 'https://rest-'+ $region +".immedia-semi.com/api/v1/camera/usage"
+        $sync_units = Invoke-RestMethod -UseBasicParsing $uri -Method Get -Headers $headers
+
+        foreach($sync_unit in $sync_units.networks){
+            $network_id = $sync_unit.network_id
+            $networkName = $sync_unit.name
+
+            foreach($camera in $sync_unit.cameras){
+                $cameraName = $camera.name
+                $cameraId = $camera.id
+                $uri = 'https://rest-'+ $region +".immedia-semi.com/network/$network_id/camera/$cameraId"
+
+                $camera = Invoke-RestMethod -UseBasicParsing $uri -Method Get -Headers $headers
+
+                # Create directory to store videos if it doesn't exist
+                $path = "$saveDirectory\Blink\$networkName\$cameraName"
+                if (-not (Test-Path $path)){
+                    New-Item -ItemType Directory -Path $path
+                }
+
+                # Get list of videos
+                $uri = "https://rest-"+ $region +".immedia-semi.com/api/v1/accounts/"+ $accountID +"/media/changed?since=2015-04-19T23:11:20+0000&page=1"
+                $response = Invoke-RestMethod -UseBasicParsing $uri -Method Get -Headers $headers
+
+                # Download each video
+                foreach($video in $response.media){
+                    $address = $video.media
+                    $timestamp = $video.created_at
+                    $network = $video.network_name
+                    $camera = $video.device_name
+                    $deleted = $video.deleted
+
+                    if($deleted -eq "True"){
+                        continue
+                    }
+
+                    # Get video timestamp in local time
+                    $videoTime = Get-Date -Date $timestamp -Format "yyyy-MM-dd_HH-mm-ss"
+
+                    # Download address of video clip
+                    $videoURL = "https://rest-"+ $region +".immedia-semi.com" + $address
+
+                    # Download video if it is new
+                    $videoPath = "$path\$videoTime.mp4"
+                    if (-not (Test-Path $videoPath)){
+                        try {
+                            Invoke-RestMethod -UseBasicParsing $videoURL -Method Get -Headers $headers -OutFile $videoPath 
+                            Write-Host "Downloading video for $camera camera in $network."
+                        } catch { 
+                            Write-Host "Error downloading video for $camera camera in $network."
+                        }
+                    }
+                }
+            }
+        }
+
+        Write-Host "All new videos downloaded to $saveDirectory\Blink\"
+
+# Wait for 30 minutes before the next run
+Start-Sleep -Seconds 1800
+}
+# Add the closing brace for the while loop
+}}
